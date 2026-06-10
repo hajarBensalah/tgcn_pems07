@@ -20,6 +20,11 @@ CHECKPOINT_DIR  = os.path.join(OUTPUT_DIR, "checkpoints")
 NPZ_PATH        = os.path.join(DATA_DIR, "PEMS07.npz")   # traffic speed array
 CSV_PATH        = os.path.join(DATA_DIR, "PEMS07.csv")   # sensor distances
 
+# Casablanca (5 boulevards — généré par simulation/)
+CASABLANCA_NPZ   = os.path.join(DATA_DIR, "CASABLANCA05.npz")
+CASABLANCA_CSV   = os.path.join(DATA_DIR, "CASABLANCA05.csv")
+CASABLANCA_NODES = 5
+
 BEST_MODEL_PATH = os.path.join(CHECKPOINT_DIR, "best_model.pt")
 
 # ---------------------------------------------------------------------------
@@ -34,14 +39,21 @@ VAL_RATIO   = 0.20
 TEST_RATIO  = 0.20          # implicit: 1 - TRAIN - VAL
 
 # ---------------------------------------------------------------------------
-# Graph construction (Gaussian kernel)
+# Graph construction
 # ---------------------------------------------------------------------------
-# sigma² for the Gaussian kernel: w_ij = exp(−d_ij² / sigma²)
+# Distance graph (level 1 — Gaussian kernel): w_ij = exp(−d_ij² / sigma²)
 # Set to None to auto-calibrate from the data's distance variance (recommended)
-SIGMA_SQ          = None
+SIGMA_SQ           = None
 # edges with weight below this threshold are set to 0 (sparsification)
 # 0.1 keeps ~60% of edges for PEMS07 distances
 DISTANCE_THRESHOLD = 0.1
+
+# Correlation graph (level 2 — traffic-driven links)
+# Built from Pearson correlation of sensor speeds on the train split only.
+CORRELATION_THRESHOLD = 0.5
+
+# Graph type for train.py / evaluate.py: "distance" or "correlation"
+GRAPH_TYPE = "distance"
 
 # ---------------------------------------------------------------------------
 # Model hyperparameters
@@ -83,3 +95,10 @@ SEED = 42
 # Visualization sensors (0-indexed)
 # ---------------------------------------------------------------------------
 VIZ_SENSORS = [5, 10, 50]   # sensors for pred-vs-true plot
+
+# ---------------------------------------------------------------------------
+# XAI (explain.py)
+# ---------------------------------------------------------------------------
+XAI_SENSORS       = [5, 10, 50]   # target sensors for neighbor ablation
+XAI_MAX_SAMPLES   = 200           # test samples used for ablation (speed)
+XAI_TOP_NEIGHBORS = 15            # neighbors shown in influence plots

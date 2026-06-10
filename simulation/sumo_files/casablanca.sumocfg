@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<configuration><input><net-file value="casablanca.net.xml" /><route-files value="casablanca.rou.xml" /><additional-files value="casablanca.add.xml" /></input><time><begin value="0" /><end value="3600" /></time></configuration>

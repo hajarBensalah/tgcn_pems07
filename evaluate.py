@@ -28,7 +28,8 @@ import seaborn as sns
 
 import config
 from models         import TGCN
-from utils          import build_dataset, build_adj_matrix
+from utils          import (build_dataset, build_adj, build_distance_W,
+                            build_corr_W, compare_graphs, get_neighbors)
 from utils.metrics  import (compute_regression_metrics,
                              compute_classification_metrics,
                              print_metrics_table)
@@ -306,10 +307,58 @@ def plot_spatial_error(preds_orig: np.ndarray,
 
 
 # ---------------------------------------------------------------------------
+# Plot 5 — Graph comparison (distance vs correlation)
+# ---------------------------------------------------------------------------
+
+def plot_graph_overlap(W_dist: np.ndarray,
+                       W_corr: np.ndarray,
+                       sensor_ids: list = None):
+    """
+    Visualise how distance-based and correlation-based neighbors differ
+    for selected sensors.
+    """
+    if sensor_ids is None:
+        sensor_ids = config.VIZ_SENSORS
+
+    top_k = config.XAI_TOP_NEIGHBORS
+    n = len(sensor_ids)
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, 4), squeeze=False)
+
+    for ax, sid in zip(axes[0], sensor_ids):
+        d_nb = set(get_neighbors(W_dist, sid, top_k=top_k).tolist())
+        c_nb = set(get_neighbors(W_corr, sid, top_k=top_k).tolist())
+        only_dist = d_nb - c_nb
+        only_corr = c_nb - d_nb
+        shared    = d_nb & c_nb
+
+        categories = ["Shared", "Distance only", "Correlation only"]
+        counts = [len(shared), len(only_dist), len(only_corr)]
+        colors = ["#2ecc71", "#3498db", "#e67e22"]
+
+        ax.bar(categories, counts, color=colors, edgecolor="white")
+        ax.set_title(f"Sensor {sid} — Top-{top_k} neighbors")
+        ax.set_ylabel("Count")
+        ax.grid(axis="y", alpha=0.3)
+
+    stats = compare_graphs(W_dist, W_corr, top_k=top_k)
+    plt.suptitle(
+        f"Graph Comparison — Global Jaccard={stats['jaccard_global']:.3f}, "
+        f"shared edges={stats['shared_edges']}",
+        fontsize=13, y=1.02,
+    )
+    plt.tight_layout()
+
+    out_path = os.path.join(config.PLOT_DIR, "graph_comparison.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[evaluate] Graph comparison saved → {out_path}")
+
+
+# ---------------------------------------------------------------------------
 # Main evaluation routine
 # ---------------------------------------------------------------------------
 
-def main(ckpt_path: str = None):
+def main(ckpt_path: str = None, graph_type: str = None):
     if ckpt_path is None:
         ckpt_path = config.BEST_MODEL_PATH
 
@@ -348,13 +397,39 @@ def main(ckpt_path: str = None):
     # ------------------------------------------------------------------ #
     # Adjacency matrix                                                    #
     # ------------------------------------------------------------------ #
-    adj_norm = build_adj_matrix(
-        csv_path  = config.CSV_PATH,
-        num_nodes = num_nodes,
-        sigma_sq  = config.SIGMA_SQ,
-        threshold = config.DISTANCE_THRESHOLD,
-        device    = device,
+    if graph_type is None:
+        graph_type = cfg.get("graph_type", config.GRAPH_TYPE)
+
+    print(f"[evaluate] Building adjacency matrix (graph_type={graph_type})...")
+    adj_norm = build_adj(
+        graph_type            = graph_type,
+        num_nodes             = num_nodes,
+        device                = device,
+        csv_path              = config.CSV_PATH,
+        npz_path              = config.NPZ_PATH,
+        train_ratio           = config.TRAIN_RATIO,
+        val_ratio             = config.VAL_RATIO,
+        sigma_sq              = config.SIGMA_SQ,
+        distance_threshold    = config.DISTANCE_THRESHOLD,
+        correlation_threshold = config.CORRELATION_THRESHOLD,
     )
+
+    # Graph comparison (always computed for the report)
+    print("[evaluate] Comparing distance vs correlation graphs...")
+    W_dist = build_distance_W(
+        csv_path=config.CSV_PATH, num_nodes=num_nodes,
+        sigma_sq=config.SIGMA_SQ, threshold=config.DISTANCE_THRESHOLD,
+    )
+    W_corr = build_corr_W(
+        npz_path=config.NPZ_PATH, num_nodes=num_nodes,
+        train_ratio=config.TRAIN_RATIO, val_ratio=config.VAL_RATIO,
+        threshold=config.CORRELATION_THRESHOLD,
+    )
+    stats = compare_graphs(W_dist, W_corr, top_k=config.XAI_TOP_NEIGHBORS)
+    print(f"  Distance edges={stats['distance_edges']}, "
+          f"Correlation edges={stats['correlation_edges']}, "
+          f"Shared={stats['shared_edges']}, "
+          f"Jaccard={stats['jaccard_global']:.3f}")
 
     # ------------------------------------------------------------------ #
     # Inference on test set                                               #
@@ -385,13 +460,19 @@ def main(ckpt_path: str = None):
     plot_pred_vs_true(preds_orig, trues_orig, config.VIZ_SENSORS)
     plot_confusion_matrix(clf_results, config.CLASS_NAMES)
     plot_spatial_error(preds_orig, trues_orig)
+    plot_graph_overlap(W_dist, W_corr, config.VIZ_SENSORS)
 
     print("\n[evaluate] All plots saved to:", config.PLOT_DIR)
+    print("[evaluate] Run 'python explain.py' for full XAI analysis "
+          "(neighbor ablation + dynamic correlation).")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate T-GCN on PEMS07")
     parser.add_argument("--checkpoint", type=str, default=None,
                         help="Path to model checkpoint (default: config.BEST_MODEL_PATH)")
+    parser.add_argument("--graph", type=str, default=None,
+                        choices=["distance", "correlation"],
+                        help="Override graph type (default: read from checkpoint)")
     args = parser.parse_args()
-    main(args.checkpoint)
+    main(args.checkpoint, args.graph)

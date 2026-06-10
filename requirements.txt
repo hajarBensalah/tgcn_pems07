@@ -4,4 +4,8 @@ pandas>=2.0.0
 scikit-learn>=1.3.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
-tqdm>=4.65.0
+pymongo>=4.6.0
+requests>=2.31.0
+
+# SUMO (optionnel — installer SUMO séparément + SUMO_HOME)
+# traci et sumolib sont inclus dans l'installation SUMO
