@@ -19,6 +19,7 @@ The script:
 import os
 import random
 import time
+import argparse
 
 import numpy as np
 import torch
@@ -27,7 +28,7 @@ from tqdm import tqdm
 
 import config
 from models      import TGCN, count_parameters
-from utils       import build_dataset, build_adj_matrix
+from utils       import build_dataset, build_adj
 from utils.metrics import compute_regression_metrics
 
 
@@ -148,8 +149,19 @@ def evaluate(model: nn.Module,
 # Main training script
 # ---------------------------------------------------------------------------
 
-def main():
+def main(graph_type: str = None, dataset: str = "pems07"):
+    if graph_type is None:
+        graph_type = config.GRAPH_TYPE
     set_seed(config.SEED)
+
+    if dataset == "casablanca":
+        npz_path = config.CASABLANCA_NPZ
+        csv_path = config.CASABLANCA_CSV
+        dataset_label = "Casablanca (5 boulevards)"
+    else:
+        npz_path = config.NPZ_PATH
+        csv_path = config.CSV_PATH
+        dataset_label = "PEMS07"
 
     # ------------------------------------------------------------------ #
     # Device                                                              #
@@ -160,9 +172,9 @@ def main():
     # ------------------------------------------------------------------ #
     # Data                                                                #
     # ------------------------------------------------------------------ #
-    print("[train] Loading PEMS07 dataset...")
+    print(f"[train] Loading {dataset_label} dataset...")
     data_dict = build_dataset(
-        npz_path    = config.NPZ_PATH,
+        npz_path    = npz_path,
         train_ratio = config.TRAIN_RATIO,
         val_ratio   = config.VAL_RATIO,
         seq_len     = config.SEQ_LEN,
@@ -178,13 +190,18 @@ def main():
     # ------------------------------------------------------------------ #
     # Adjacency matrix                                                    #
     # ------------------------------------------------------------------ #
-    print("[train] Building adjacency matrix...")
-    adj_norm = build_adj_matrix(
-        csv_path  = config.CSV_PATH,
-        num_nodes = num_nodes,
-        sigma_sq  = config.SIGMA_SQ,
-        threshold = config.DISTANCE_THRESHOLD,
-        device    = device,
+    print(f"[train] Building adjacency matrix (graph_type={graph_type})...")
+    adj_norm = build_adj(
+        graph_type            = graph_type,
+        num_nodes             = num_nodes,
+        device                = device,
+        csv_path              = csv_path,
+        npz_path              = npz_path,
+        train_ratio           = config.TRAIN_RATIO,
+        val_ratio             = config.VAL_RATIO,
+        sigma_sq              = config.SIGMA_SQ,
+        distance_threshold    = config.DISTANCE_THRESHOLD,
+        correlation_threshold = config.CORRELATION_THRESHOLD,
     )
 
     # ------------------------------------------------------------------ #
@@ -281,6 +298,7 @@ def main():
                     "hidden_dim" : config.HIDDEN_DIM,
                     "gcn_layers" : config.GCN_LAYERS,
                     "pred_len"   : config.PRED_LEN,
+                    "graph_type" : graph_type,
                 },
             }, config.BEST_MODEL_PATH)
             print(f"  ✔ New best model saved  (val_loss={val_loss:.4f})")
@@ -305,12 +323,12 @@ def main():
     # ------------------------------------------------------------------ #
     # Quick loss-curve plot saved inline                                 #
     # ------------------------------------------------------------------ #
-    _save_loss_curve(train_losses, val_losses)
+    _save_loss_curve(train_losses, val_losses, dataset_label)
 
     print("[train] Loss curve saved to outputs/plots/loss_curve.png")
 
 
-def _save_loss_curve(train_losses, val_losses):
+def _save_loss_curve(train_losses, val_losses, dataset_label="PEMS07"):
     """Save training / validation loss curves without launching evaluate.py."""
     import matplotlib
     matplotlib.use("Agg")
@@ -324,7 +342,7 @@ def _save_loss_curve(train_losses, val_losses):
             linestyle="--")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("MAE Loss (normalised)")
-    ax.set_title("T-GCN Training and Validation Loss — PEMS07")
+    ax.set_title(f"T-GCN Training and Validation Loss — {dataset_label}")
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -335,4 +353,12 @@ def _save_loss_curve(train_losses, val_losses):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Train T-GCN")
+    parser.add_argument("--graph", type=str, default=None,
+                        choices=["distance", "correlation"],
+                        help="Adjacency type: distance (level 1) or correlation (level 2)")
+    parser.add_argument("--dataset", type=str, default="pems07",
+                        choices=["pems07", "casablanca"],
+                        help="Dataset: pems07 (New York) or casablanca (5 boulevards)")
+    args = parser.parse_args()
+    main(args.graph, args.dataset)

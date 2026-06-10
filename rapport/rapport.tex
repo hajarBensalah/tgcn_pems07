@@ -1,0 +1,721 @@
+% =============================================================================
+% Rapport de projet — Prédiction du trafic par T-GCN
+% Simulation SUMO + OpenStreetMap + MongoDB (Casablanca)
+% =============================================================================
+% Compilation :
+%   pdflatex rapport.tex
+%   pdflatex rapport.tex   (2e passe pour la table des matières)
+%
+% Placez vos captures d'écran dans le dossier rapport/figures/
+% =============================================================================
+
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows.meta, positioning}
+
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!8},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+}
+
+\graphicspath{{figures/}}
+
+% --- Informations à compléter ---
+\title{%
+  \textbf{Prédiction du trafic routier}\\[0.4cm]
+  \large Réseau T-GCN, simulation SUMO/OpenStreetMap\\[0.2cm]
+  \large et stockage MongoDB — Casablanca%
+}
+\author{%
+  Noms des étudiants\\[0.2cm]
+  Encadré par : Nom du professeur\\[0.2cm]
+  Établissement — Année universitaire 2025--2026%
+}
+\date{\today}
+
+\begin{document}
+
+% =============================================================================
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+Ce projet met en œuvre un pipeline complet de prévision du trafic basé sur le
+modèle \textbf{T-GCN} (Temporal Graph Convolutional Network). Dans un premier
+temps, le modèle est entraîné sur le jeu de données de référence \textbf{PEMS07}
+(région de New York, 883 capteurs). Dans un second temps, une simulation
+microscopique du trafic est réalisée sur \textbf{cinq boulevards de Casablanca}
+à l'aide de \textbf{SUMO} et de données \textbf{OpenStreetMap}. Les séries
+temporelles produites sont stockées dans \textbf{MongoDB}, partitionnées en
+ensembles \emph{test} et \emph{T-GCN}, puis exportées pour l'entraînement du
+modèle. Le rapport décrit l'architecture, les choix techniques et les résultats
+obtenus.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% =============================================================================
+\chapter{Introduction}
+% =============================================================================
+
+\section{Contexte et objectifs}
+
+La gestion du trafic urbain nécessite des outils capables de \textbf{prédire}
+la vitesse, le débit et l'état de congestion sur un réseau routier. Les
+réseaux de neurones convolutifs sur graphes temporels (T-GCN) exploitent à la
+fois la \textbf{structure spatiale} du réseau (graphe des capteurs ou des
+boulevards) et la \textbf{dynamique temporelle} des vitesses mesurées.
+
+Les objectifs du projet sont les suivants :
+\begin{itemize}
+  \item Implémenter et entraîner un modèle T-GCN sur le benchmark PEMS07 ;
+  \item Construire un graphe de distance et un graphe de corrélation du trafic ;
+  \item Simuler le trafic sur 5 boulevards parallèles/perpendiculaires à
+        Casablanca avec SUMO et OpenStreetMap ;
+  \item Stocker les données simulées dans MongoDB avec une séparation
+        \emph{test} / \emph{entraînement T-GCN} ;
+  \item Calculer les métriques par boulevard (vitesse moyenne, débit, densité,
+        état du trafic) ;
+  \item Exporter les données au format compatible T-GCN et entraîner le modèle
+        sur Casablanca.
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+% IMAGE 1 : Photo ou carte de Casablanca / contexte du projet
+% Fichier suggéré : figures/intro_casablanca.png
+% Contenu : carte Google Maps ou OSM du centre de Casablanca avec les 5 boulevards surlignés
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{intro_casablanca.png}
+  \caption{%
+    \textbf{[À insérer]} Carte du centre de Casablanca montrant les cinq boulevards
+    étudiés : Mohammed V, Zerktouni, Hassan II, Avenue des FAR et Brahim Roudani.
+    Source : OpenStreetMap ou capture Google Maps avec annotations.
+  }
+  \label{fig:intro-casablanca}
+\end{figure}
+
+\section{Organisation du rapport}
+
+Le chapitre~\ref{ch:architecture} présente l'architecture globale.
+Le chapitre~\ref{ch:tgcn} détaille le modèle T-GCN et l'expérience PEMS07.
+Le chapitre~\ref{ch:simulation} décrit la simulation SUMO/OSM.
+Le chapitre~\ref{ch:mongodb} traite du stockage MongoDB.
+Le chapitre~\ref{ch:resultats} présente les résultats et visualisations.
+Le chapitre~\ref{ch:conclusion} conclut et propose des perspectives.
+
+% =============================================================================
+\chapter{Architecture globale du système}
+\label{ch:architecture}
+% =============================================================================
+
+\section{Vue d'ensemble}
+
+Le projet se compose de deux branches complémentaires :
+\begin{enumerate}
+  \item \textbf{Branche PEMS07} : données historiques réelles (New York) —
+        référence méthodologique et comparaison des graphes distance/corrélation.
+  \item \textbf{Branche Casablanca} : données simulées (SUMO + OSM) —
+        application locale sur 5 boulevards avec stockage MongoDB.
+\end{enumerate}
+
+% Schéma TikZ intégré (pas besoin d'image externe)
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      node distance=1.1cm and 1.4cm,
+      box/.style={draw, rounded corners, minimum width=2.8cm, minimum height=0.9cm,
+                  align=center, font=\small},
+      arrow/.style={-{Stealth[length=2.5mm]}, thick}
+    ]
+    \node[box, fill=blue!10] (osm) {OpenStreetMap\\(Overpass API)};
+    \node[box, fill=orange!15, below=of osm] (sumo) {SUMO\\netconvert + TraCI};
+    \node[box, fill=green!10, below=of sumo] (mongo) {MongoDB\\(Docker)};
+    \node[box, fill=purple!10, below left=1.2cm and 0.5cm of mongo] (test) {Split test\\40\%};
+    \node[box, fill=purple!10, below right=1.2cm and 0.5cm of mongo] (tgcn) {Split T-GCN\\60\%};
+    \node[box, fill=red!10, below=1.4cm of mongo] (export) {CASABLANCA05\\.npz + .csv};
+    \node[box, fill=yellow!15, below=of export] (model) {Modèle T-GCN\\(PyTorch)};
+
+    \node[box, fill=gray!10, right=3.5cm of sumo] (pems) {PEMS07\\883 capteurs};
+    \node[box, fill=yellow!15, below=of pems] (model2) {Modèle T-GCN\\(référence)};
+
+    \draw[arrow] (osm) -- (sumo);
+    \draw[arrow] (sumo) -- (mongo);
+    \draw[arrow] (mongo) -- (test);
+    \draw[arrow] (mongo) -- (tgcn);
+    \draw[arrow] (tgcn) -- (export);
+    \draw[arrow] (export) -- (model);
+    \draw[arrow] (pems) -- (model2);
+    \draw[dashed, arrow] (model2) -- node[right, font=\scriptsize]{même architecture} (model);
+  \end{tikzpicture}
+  \caption{Architecture globale du pipeline : simulation Casablanca (gauche) et
+           benchmark PEMS07 (droite).}
+  \label{fig:architecture}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+% IMAGE 2 : Capture du dépôt / structure des dossiers dans l'IDE
+% Fichier suggéré : figures/structure_projet.png
+% Contenu : arborescence TGCN/ (models/, simulation/, data/, train.py...)
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.75\textwidth]{structure_projet.png}
+  \caption{%
+    \textbf{[À insérer]} Structure du projet dans l'éditeur (VS Code / Cursor) :
+    dossiers \texttt{models/}, \texttt{simulation/}, \texttt{utils/}, \texttt{data/}.
+  }
+  \label{fig:structure}
+\end{figure}
+
+\section{Stack technique}
+
+\begin{table}[H]
+  \centering
+  \caption{Technologies utilisées}
+  \label{tab:stack}
+  \begin{tabular}{lll}
+    \toprule
+    Composant        & Technologie        & Rôle \\
+    \midrule
+    Modèle           & PyTorch            & Implémentation T-GCN \\
+    Données NY       & PEMS07 (.npz/.csv) & Benchmark 883 capteurs \\
+    Simulation       & Eclipse SUMO 1.27  & Microsimulation trafic \\
+    Cartographie     & OpenStreetMap      & Réseau routier Casablanca \\
+    Base de données  & MongoDB 7 (Docker) & Stockage séries temporelles \\
+    Langage          & Python 3.11        & Pipeline complet \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =============================================================================
+\chapter{Modèle T-GCN et expérience PEMS07}
+\label{ch:tgcn}
+% =============================================================================
+
+\section{Principe du T-GCN}
+
+Le T-GCN (Temporal Graph Convolutional Network) combine :
+\begin{itemize}
+  \item un \textbf{GCN} (Graph Convolutional Network) pour la diffusion spatiale
+        de l'information entre nœuds du graphe ;
+  \item une cellule récurrente de type \textbf{GRU} pour modéliser la dépendance
+        temporelle des vitesses.
+\end{itemize}
+
+Pour chaque pas de temps $t$, l'entrée est une matrice de vitesses
+$X_t \in \mathbb{R}^{N \times 1}$ sur $N$ nœuds (capteurs ou boulevards).
+Le modèle prédit les $H$ pas futurs à partir d'une fenêtre de $T_{in}$ pas
+historiques.
+
+\subsection{Hyperparamètres}
+
+\begin{table}[H]
+  \centering
+  \caption{Hyperparamètres principaux (\texttt{config.py})}
+  \label{tab:hyperparams}
+  \begin{tabular}{ll}
+    \toprule
+    Paramètre            & Valeur \\
+    \midrule
+    \texttt{NUM\_NODES}  & 883 (PEMS07) / 5 (Casablanca) \\
+    \texttt{SEQ\_LEN}    & 12 pas d'entrée \\
+    \texttt{PRED\_LEN}   & 12 pas de prédiction \\
+    \texttt{HIDDEN\_DIM} & 64 \\
+    \texttt{BATCH\_SIZE} & 64 \\
+    \texttt{LEARNING\_RATE} & $10^{-3}$ \\
+    Split temporel       & 60\% train / 20\% val / 20\% test \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Construction des graphes}
+
+Deux types de graphes d'adjacence sont implémentés (\texttt{utils/graph\_utils.py}) :
+
+\subsection{Niveau 1 — Graphe de distance}
+
+Les arêtes proviennent du fichier \texttt{PEMS07.csv} (distances entre capteurs).
+Le poids est calculé par noyau gaussien :
+\begin{equation}
+  W_{ij} = \exp\left(-\frac{d_{ij}^2}{\sigma^2}\right)
+\end{equation}
+puis sparsifié (seuil 0{,}1) et normalisé symétriquement.
+
+\subsection{Niveau 2 — Graphe de corrélation}
+
+Les arêtes sont construites à partir de la corrélation de Pearson des vitesses
+sur la partition d'entraînement uniquement (seuil $|r| \geq 0{,}5$).
+
+% -----------------------------------------------------------------------------
+% IMAGE 3 : Heatmap du graphe ou comparaison distance vs corrélation
+% Fichier suggéré : figures/graphe_adjacency.png
+% Contenu : outputs/plots/ généré par evaluate.py ou explain.py
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{graphe_adjacency.png}
+  \caption{%
+    \textbf{[À insérer]} Visualisation du graphe d'adjacence (distance ou
+    corrélation). Générer avec \texttt{python explain.py} ou
+    \texttt{python evaluate.py --graph correlation}.
+  }
+  \label{fig:graphe}
+\end{figure}
+
+\section{Entraînement et évaluation}
+
+\subsection{Commandes}
+
+\begin{lstlisting}[language=bash]
+# Entrainement PEMS07 — graphe distance
+python train.py --graph distance
+
+# Entrainement PEMS07 — graphe correlation
+python train.py --graph correlation
+
+# Entrainement Casablanca (apres export SUMO)
+python train.py --dataset casablanca --graph distance
+\end{lstlisting}
+
+\subsection{Métriques d'évaluation}
+
+\begin{itemize}
+  \item \textbf{MAE}, \textbf{RMSE}, \textbf{MAPE} (régression) ;
+  \item Classification de l'état du trafic : Congested ($\leq 30$ km/h),
+        Moderate ($\leq 60$ km/h), Free Flow ($> 60$ km/h).
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+% IMAGE 4 : Courbe de loss train/val
+% Fichier suggéré : figures/loss_curve.png
+% Contenu : copier outputs/plots/loss_curve.png
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.75\textwidth]{loss_curve.png}
+  \caption{%
+    \textbf{[À insérer]} Courbes de perte MAE en entraînement et validation
+    (\texttt{outputs/plots/loss\_curve.png}).
+  }
+  \label{fig:loss}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+% IMAGE 5 : Prédiction vs vérité terrain
+% Fichier suggéré : figures/pred_vs_true.png
+% Contenu : outputs/plots/ de evaluate.py
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{pred_vs_true.png}
+  \caption{%
+    \textbf{[À insérer]} Comparaison vitesse prédite vs réelle sur quelques
+    capteurs/boulevards (\texttt{outputs/plots/}).
+  }
+  \label{fig:pred}
+\end{figure}
+
+\section{Explicabilité (XAI)}
+
+Le script \texttt{explain.py} réalise une analyse par \textbf{ablation des
+voisins} : on masque successivement chaque nœud voisin dans le graphe pour
+mesurer son influence sur la prédiction d'un capteur cible.
+
+% -----------------------------------------------------------------------------
+% IMAGE 6 : Heatmap XAI / influence des voisins
+% Fichier suggéré : figures/xai_ablation.png
+% Contenu : outputs/plots/ de explain.py
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{xai_ablation.png}
+  \caption{%
+    \textbf{[À insérer]} Analyse XAI : influence des nœuds voisins sur la
+    prédiction (généré par \texttt{python explain.py}).
+  }
+  \label{fig:xai}
+\end{figure}
+
+% =============================================================================
+\chapter{Simulation SUMO et OpenStreetMap — Casablanca}
+\label{ch:simulation}
+% =============================================================================
+
+\section{Zone d'étude et boulevards}
+
+La simulation porte sur une zone de $\approx 3 \times 3$ km au centre de
+Casablanca, téléchargée via l'API Overpass (OpenStreetMap).
+
+\begin{table}[H]
+  \centering
+  \caption{Cinq boulevards modélisés}
+  \label{tab:boulevards}
+  \begin{tabular}{clcc}
+    \toprule
+    ID & Boulevard              & Orientation  & Arêtes SUMO \\
+    \midrule
+    0  & Mohammed V             & Nord--Sud    & $\sim$185 \\
+    1  & Zerktouni              & Nord--Sud    & $\sim$168 \\
+    2  & Hassan II              & Est--Ouest   & $\sim$162 \\
+    3  & Avenue des FAR         & Est--Ouest   & $\sim$162 \\
+    4  & Brahim Roudani         & Connecteur   & $\sim$162 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Pipeline de simulation}
+
+\begin{enumerate}
+  \item \textbf{Téléchargement OSM} (\texttt{simulation/osm/download\_osm.py}) :
+        requête Overpass sur la bbox Casablanca ;
+  \item \textbf{Construction réseau} (\texttt{netconvert}) : conversion
+        OSM $\rightarrow$ \texttt{casablanca.net.xml} ;
+  \item \textbf{Demande de trafic} (\texttt{randomTrips.py}) : génération de
+        $\sim$2500 véhicules sur 3600 s simulées ;
+  \item \textbf{Détecteurs E1} : boucles inductive sur chaque boulevard ;
+  \item \textbf{Simulation TraCI} : collecte vitesse, débit, densité toutes les
+        60 s (après 300 s de chauffe).
+\end{enumerate}
+
+% -----------------------------------------------------------------------------
+% IMAGE 7 : Terminal — téléchargement OSM réussi
+% Fichier suggéré : figures/osm_download.png
+% Contenu : capture "Fichier sauvegardé: casablanca.osm.xml (675.4 KB)"
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{osm_download.png}
+  \caption{%
+    \textbf{[À insérer]} Capture terminal : téléchargement réussi du fichier OSM
+    (\texttt{python -m simulation.osm.download\_osm}).
+  }
+  \label{fig:osm}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+% IMAGE 8 : SUMO-GUI — réseau routier Casablanca
+% Fichier suggéré : figures/sumo_reseau.png
+% Contenu : capture SUMO-GUI montrant le réseau (vue dézoomée ou zoomée)
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{sumo_reseau.png}
+  \caption{%
+    \textbf{[À insérer]} Réseau routier SUMO généré depuis OpenStreetMap
+    (capture SUMO-GUI ou \texttt{casablanca.net.xml} visualisé).
+  }
+  \label{fig:sumo-reseau}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+% IMAGE 9 : SUMO-GUI avec véhicules (zoom centre-ville)
+% Fichier suggéré : figures/sumo_voitures.png
+% Contenu : SUMO-GUI zoomé sur Mohammed V avec voitures visibles, t > 300s
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{sumo_voitures.png}
+  \caption{%
+    \textbf{[À insérer]} Simulation SUMO avec trafic visible (zoom sur le
+    centre-ville, temps simulé $t > 300$ s).
+    Commande : \texttt{python -m simulation.run\_pipeline --step simulate --gui}.
+  }
+  \label{fig:sumo-voitures}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+% IMAGE 10 : Terminal — mapping boulevards → arêtes
+% Fichier suggéré : figures/sumo_mapping.png
+% Contenu : sortie "[Boulevard Mohammed V] → 185 arêtes" etc.
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{sumo_mapping.png}
+  \caption{%
+    \textbf{[À insérer]} Association automatique des boulevards aux arêtes SUMO
+    par correspondance de noms OSM.
+  }
+  \label{fig:mapping}
+\end{figure}
+
+\section{Paramètres de simulation}
+
+\begin{table}[H]
+  \centering
+  \caption{Paramètres SUMO (\texttt{simulation/config.py})}
+  \label{tab:sumo}
+  \begin{tabular}{ll}
+    \toprule
+    Paramètre               & Valeur \\
+    \midrule
+    Durée simulée           & 3600 s (1 h) \\
+    Pas d'échantillonnage   & 60 s \\
+    Période de chauffe      & 300 s \\
+    Véhicules cibles        & 2500 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =============================================================================
+\chapter{Stockage MongoDB}
+\label{ch:mongodb}
+% =============================================================================
+
+\section{Architecture de la base}
+
+MongoDB est déployé via Docker :
+\begin{lstlisting}[language=bash]
+docker run -d --name mongo-tgcn -p 27017:27017 mongo:7
+\end{lstlisting}
+
+Base de données : \texttt{tgcn\_casablanca}.
+
+\begin{table}[H]
+  \centering
+  \caption{Collections MongoDB}
+  \label{tab:mongo}
+  \begin{tabular}{ll}
+    \toprule
+    Collection           & Contenu \\
+    \midrule
+    \texttt{boulevards}  & Définition des 5 boulevards \\
+    \texttt{simulation\_runs} & Métadonnées de chaque exécution \\
+    \texttt{speed\_timeseries} & Vitesse, débit, densité par pas \\
+    \texttt{boulevard\_metrics} & Métriques agrégées par boulevard \\
+    \texttt{dataset\_splits} & Répartition test / T-GCN \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Partitionnement des données}
+
+Comme demandé dans le cahier des charges :
+\begin{itemize}
+  \item \textbf{40\% test} : évaluation, visualisation des métriques ;
+  \item \textbf{60\% T-GCN} : export vers \texttt{CASABLANCA05.npz} pour
+        l'entraînement.
+\end{itemize}
+
+Le split est \textbf{temporel} : les premiers pas de temps vont au test, les
+derniers à l'entraînement.
+
+% -----------------------------------------------------------------------------
+% IMAGE 11 : MongoDB Compass ou terminal mongo
+% Fichier suggéré : figures/mongodb_collections.png
+% Contenu : MongoDB Compass montrant les collections et un document exemple
+%           OU capture "docker ps" + "Connexion OK"
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{mongodb_collections.png}
+  \caption{%
+    \textbf{[À insérer]} Base MongoDB \texttt{tgcn\_casablanca} : collections
+    et exemple de document \texttt{speed\_timeseries}.
+    Outil : MongoDB Compass (\url{https://www.mongodb.com/products/compass}).
+  }
+  \label{fig:mongo}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+% IMAGE 12 : Terminal — métriques par boulevard
+% Fichier suggéré : figures/metrics_terminal.png
+% Contenu : sortie de python -m simulation.run_pipeline --metrics
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{metrics_terminal.png}
+  \caption{%
+    \textbf{[À insérer]} Tableau des métriques par boulevard affiché dans le
+    terminal (\texttt{python -m simulation.run\_pipeline --metrics}).
+  }
+  \label{fig:metrics}
+\end{figure}
+
+% =============================================================================
+\chapter{Résultats et visualisations}
+\label{ch:resultats}
+% =============================================================================
+
+\section{Métriques de trafic par boulevard}
+
+Pour chaque boulevard et chaque pas de temps, le pipeline calcule :
+
+\begin{table}[H]
+  \centering
+  \caption{Métriques collectées}
+  \label{tab:metriques}
+  \begin{tabular}{lll}
+    \toprule
+    Métrique            & Unité          & Description \\
+    \midrule
+    Vitesse moyenne     & km/h           & \texttt{avg\_speed\_kmh} \\
+    Débit               & véh./h         & \texttt{flow\_vph} \\
+    Densité             & véh./km        & \texttt{density\_vpk} \\
+    Occupation          & \%             & \texttt{occupancy\_pct} \\
+    État du trafic      & ---            & Congested / Moderate / Free Flow \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% -----------------------------------------------------------------------------
+% IMAGE 13 : Graphique vitesses par boulevard dans le temps
+% Fichier suggéré : figures/speed_timeseries.png
+% Contenu : simulation/outputs/plots/speed_test_*.png ou speed_tgcn_*.png
+%           généré par python -m simulation.view_metrics
+% -----------------------------------------------------------------------------
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{speed_timeseries.png}
+  \caption{%
+    \textbf{[À insérer]} Évolution de la vitesse moyenne par boulevard
+    (split test ou T-GCN). Générer avec
+    \texttt{python -m simulation.view\_metrics}.
+  }
+  \label{fig:speed-ts}
+\end{figure}
+
+\section{Export vers T-GCN}
+
+Le module \texttt{simulation/export\_tgcn.py} produit :
+\begin{itemize}
+  \item \texttt{data/CASABLANCA05.npz} : matrice $[T, 5]$ des vitesses ;
+  \item \texttt{data/CASABLANCA05.csv} : graphe de distances géodésiques
+        entre boulevards (format compatible \texttt{graph\_utils.py}).
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+% IMAGE 14 : Comparaison PEMS07 vs Casablanca (optionnel)
+% Fichier suggéré : figures/comparaison_datasets.png
+% Contenu : tableau ou graphique comparant N=883 vs N=5, NY vs Casablanca
+% -----------------------------------------------------------------------------
+
+\section{Lien PEMS07 $\rightarrow$ Casablanca}
+
+\begin{table}[H]
+  \centering
+  \caption{Comparaison des deux jeux de données}
+  \label{tab:compare}
+  \begin{tabular}{lcc}
+    \toprule
+    Caractéristique  & PEMS07        & Casablanca \\
+    \midrule
+    Région           & New York      & Casablanca \\
+    Nombre de nœuds  & 883           & 5 \\
+    Source           & Capteurs réels & Simulation SUMO \\
+    Format           & $[T, N]$      & $[T, N]$ \\
+    Fenêtre          & 12 / 12       & 12 / 12 \\
+    Stockage         & Fichiers locaux & MongoDB + NPZ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =============================================================================
+\chapter{Conclusion et perspectives}
+\label{ch:conclusion}
+% =============================================================================
+
+\section{Bilan}
+
+Ce projet a permis de :
+\begin{itemize}
+  \item implémenter un modèle T-GCN complet (entraînement, évaluation, XAI) ;
+  \item comparer deux stratégies de graphe (distance et corrélation) ;
+  \item simuler le trafic sur 5 boulevards de Casablanca à partir d'OpenStreetMap ;
+  \item stocker et partitionner les données dans MongoDB ;
+  \item exporter un jeu de données local compatible avec le pipeline T-GCN.
+\end{itemize}
+
+\section{Perspectives}
+
+\begin{itemize}
+  \item Augmenter le nombre de nœuds (plus de boulevards ou capteurs par boulevard) ;
+  \item Calibrer la demande SUMO sur des données réelles de Casablanca ;
+  \item Déployer une API temps réel (FastAPI) connectée à MongoDB ;
+  \item Comparer les performances T-GCN PEMS07 vs Casablanca dans un tableau unifié ;
+  \item Intégrer la prédiction en boucle fermée dans SUMO (trafic adaptatif).
+\end{itemize}
+
+% =============================================================================
+\appendix
+\chapter{Guide des figures à capturer}
+% =============================================================================
+
+Ce tableau récapitule \textbf{toutes les images} à placer dans
+\texttt{rapport/figures/}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabular}{clp{6.5cm}}
+    \toprule
+    Fichier & Figure & Comment l'obtenir \\
+    \midrule
+    \texttt{intro\_casablanca.png}      & Fig.~\ref{fig:intro-casablanca} & Carte OSM/Google Maps annotée \\
+    \texttt{structure\_projet.png}      & Fig.~\ref{fig:structure}        & Capture IDE (arborescence) \\
+    \texttt{graphe\_adjacency.png}       & Fig.~\ref{fig:graphe}           & \texttt{python explain.py} \\
+    \texttt{loss\_curve.png}             & Fig.~\ref{fig:loss}             & \texttt{outputs/plots/loss\_curve.png} \\
+    \texttt{pred\_vs\_true.png}           & Fig.~\ref{fig:pred}             & \texttt{python evaluate.py} \\
+    \texttt{xai\_ablation.png}           & Fig.~\ref{fig:xai}              & \texttt{python explain.py} \\
+    \texttt{osm\_download.png}           & Fig.~\ref{fig:osm}              & Terminal OSM download \\
+    \texttt{sumo\_reseau.png}            & Fig.~\ref{fig:sumo-reseau}      & SUMO-GUI réseau vide \\
+    \texttt{sumo\_voitures.png}          & Fig.~\ref{fig:sumo-voitures}    & SUMO-GUI avec trafic \\
+    \texttt{sumo\_mapping.png}           & Fig.~\ref{fig:mapping}          & Terminal mapping arêtes \\
+    \texttt{mongodb\_collections.png}    & Fig.~\ref{fig:mongo}            & MongoDB Compass \\
+    \texttt{metrics\_terminal.png}       & Fig.~\ref{fig:metrics}          & \texttt{--metrics} \\
+    \texttt{speed\_timeseries.png}       & Fig.~\ref{fig:speed-ts}         & \texttt{view\_metrics} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Liste complète des captures d'écran à insérer}
+\end{table}
+
+\chapter{Commandes utiles}
+
+\begin{lstlisting}[language=bash]
+# Environnement
+pip install -r requirements.txt
+docker start mongo-tgcn
+
+# Pipeline Casablanca complet
+python -m simulation.run_pipeline
+
+# Etapes separees
+python -m simulation.run_pipeline --step osm
+python -m simulation.run_pipeline --step sumo
+python -m simulation.run_pipeline --step simulate
+python -m simulation.run_pipeline --step simulate --gui
+python -m simulation.run_pipeline --step export
+python -m simulation.run_pipeline --metrics
+
+# T-GCN
+python train.py --graph distance
+python train.py --dataset casablanca
+python evaluate.py --dataset casablanca
+python explain.py
+python -m simulation.view_metrics
+\end{lstlisting}
+
+\end{document}
