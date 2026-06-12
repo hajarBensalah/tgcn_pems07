@@ -101,6 +101,11 @@ def build_dataset(npz_path: str,
     speed, train_end, val_end = load_pems07(npz_path, train_ratio, val_ratio)
     T, N = speed.shape
 
+    orig_seq, orig_pred = seq_len, pred_len
+    seq_len, pred_len = resolve_window_sizes(T, train_ratio, seq_len, pred_len)
+    if seq_len != orig_seq or pred_len != orig_pred:
+        print(f"[data_loader] Fenêtre ajustée : seq_len={seq_len}, pred_len={pred_len}")
+
     # ------------------------------------------------------------------ #
     # 2. Handle missing values (NaN → linear interpolation per sensor)   #
     # ------------------------------------------------------------------ #
@@ -193,6 +198,33 @@ def _interpolate_missing(speed: np.ndarray) -> np.ndarray:
     return result.astype(np.float32)
 
 
+def resolve_window_sizes(T: int, train_ratio: float,
+                         seq_len: int, pred_len: int) -> tuple[int, int]:
+    """
+    Ajuste seq_len / pred_len si le jeu de données est court
+    (typiquement Casablanca après simulation SUMO).
+    """
+    train_T = int(T * train_ratio)
+    needed = seq_len + pred_len
+
+    while train_T < needed and seq_len > 2:
+        seq_len -= 1
+        pred_len -= 1
+        needed = seq_len + pred_len
+
+    if train_T < needed:
+        min_T = int(np.ceil(needed / train_ratio))
+        raise ValueError(
+            f"Jeu de données trop court : T={T} pas, partition train={train_T}. "
+            f"Il faut au moins seq_len+pred_len={needed} pas dans le train "
+            f"(soit T>={min_T} au total).\n"
+            f"Relancez : python -m simulation.run_pipeline --step simulate "
+            f"puis --step export"
+        )
+
+    return seq_len, pred_len
+
+
 def _create_sequences(arr: np.ndarray, seq_len: int,
                       pred_len: int):
     """
@@ -201,9 +233,6 @@ def _create_sequences(arr: np.ndarray, seq_len: int,
     For each valid starting position t:
         X[t] = arr[t : t + seq_len]          shape [seq_len, N]
         y[t] = arr[t + seq_len : t + seq_len + pred_len]  shape [pred_len, N]
-
-    We add a feature dimension of 1 to X so the model receives
-    [seq_len, N, 1] tensors (univariate speed).
 
     Parameters
     ----------

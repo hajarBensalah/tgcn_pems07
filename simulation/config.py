@@ -83,11 +83,14 @@ SUMO_CFG = os.path.join(SUMO_DIR, "casablanca.sumocfg")
 # Simulation
 # ---------------------------------------------------------------------------
 SIMULATION_DURATION = 3600       # secondes (1 heure simulée)
-SIMULATION_STEP = 60             # pas d'échantillonnage (1 min → aligné PEMS07 5min ou 1min)
+SIMULATION_STEP = 30             # pas d'échantillonnage (30 s → plus de points pour T-GCN)
 WARMUP_STEPS = 300                 # secondes de chauffe avant collecte
 
 # Nombre cible de véhicules sur toute la simulation (plus = trafic plus dense)
-TRAFFIC_VEHICLE_COUNT = 2500
+# Exemple : 2500 (~léger), 25000 (~très dense, ~7 véh/s sur 3600 s)
+TRAFFIC_VEHICLE_COUNT = 3000 #Changeant les valeurs en 3000 véhicules
+# Période minimum entre deux départs (randomTrips -p)
+TRAFFIC_MIN_PERIOD = 0.1
 # Ralenti GUI (ms entre chaque pas) — uniquement avec --gui
 SUMO_GUI_DELAY_MS = 80
 

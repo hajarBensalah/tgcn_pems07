@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-06-10T21:46:06.883092+00:00 by Eclipse SUMO GUI 1.27.0
+<!-- generated on 2026-06-12T19:41:35.023275+00:00 by Eclipse SUMO GUI 1.27.0
 <sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
@@ -16,7 +16,7 @@
     </time>
 
     <traci_server>
-        <remote-port value="42893"/>
+        <remote-port value="61417"/>
     </traci_server>
 
     <gui_only>
@@ -30,15 +30,12 @@
 
 <detector xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/det_e1_file.xsd">
     <interval begin="0.00" end="60.00" id="det_b3_e0" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="0.00" end="60.00" id="det_b3_e1" nVehContrib="1" flow="60.00" occupancy="0.82" speed="10.17" harmonicMeanSpeed="10.17" length="5.00" nVehEntered="1"/>
-    <interval begin="0.00" end="60.00" id="det_b3_e2" nVehContrib="1" flow="60.00" occupancy="0.39" speed="21.59" harmonicMeanSpeed="21.59" length="5.00" nVehEntered="1"/>
+    <interval begin="0.00" end="60.00" id="det_b3_e1" nVehContrib="1" flow="60.00" occupancy="0.82" speed="10.19" harmonicMeanSpeed="10.19" length="5.00" nVehEntered="1"/>
+    <interval begin="0.00" end="60.00" id="det_b3_e2" nVehContrib="1" flow="60.00" occupancy="0.38" speed="22.15" harmonicMeanSpeed="22.15" length="5.00" nVehEntered="1"/>
     <interval begin="60.00" end="120.00" id="det_b3_e0" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
     <interval begin="60.00" end="120.00" id="det_b3_e1" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
     <interval begin="60.00" end="120.00" id="det_b3_e2" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="120.00" end="180.00" id="det_b3_e0" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="120.00" end="180.00" id="det_b3_e1" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="120.00" end="180.00" id="det_b3_e2" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="180.00" end="202.00" id="det_b3_e0" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="180.00" end="202.00" id="det_b3_e1" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
-    <interval begin="180.00" end="202.00" id="det_b3_e2" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
+    <interval begin="120.00" end="140.00" id="det_b3_e0" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
+    <interval begin="120.00" end="140.00" id="det_b3_e1" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
+    <interval begin="120.00" end="140.00" id="det_b3_e2" nVehContrib="0" flow="0.00" occupancy="0.00" speed="-1.00" harmonicMeanSpeed="-1.00" length="-1.00" nVehEntered="0"/>
 </detector>

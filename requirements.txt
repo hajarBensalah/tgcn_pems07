@@ -1,4 +1,9 @@
+# PyTorch GPU (RTX) — installer séparément, ex. :
+#   pip uninstall torch -y
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# (cu118 / cu126 / cu128 selon le driver NVIDIA)
 torch>=2.0.0
+tqdm>=4.65.0
 numpy>=1.24.0
 pandas>=2.0.0
 scikit-learn>=1.3.0

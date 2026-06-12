@@ -41,7 +41,8 @@ from utils.metrics  import (compute_regression_metrics,
 
 def load_checkpoint(ckpt_path: str, device: torch.device):
     """Load model state from a .pt checkpoint file."""
-    ckpt = torch.load(ckpt_path, map_location=device)
+    # weights_only=False: checkpoint includes numpy scaler arrays (PyTorch 2.6+ default is True)
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg  = ckpt["config"]
 
     model = TGCN(
@@ -358,7 +359,7 @@ def plot_graph_overlap(W_dist: np.ndarray,
 # Main evaluation routine
 # ---------------------------------------------------------------------------
 
-def main(ckpt_path: str = None, graph_type: str = None):
+def main(ckpt_path: str = None, graph_type: str = None, dataset: str = "pems07"):
     if ckpt_path is None:
         ckpt_path = config.BEST_MODEL_PATH
 
@@ -367,6 +368,13 @@ def main(ckpt_path: str = None, graph_type: str = None):
             f"Checkpoint not found at {ckpt_path}. "
             "Run train.py first."
         )
+
+    if dataset == "casablanca":
+        npz_path = config.CASABLANCA_NPZ
+        csv_path = config.CASABLANCA_CSV
+    else:
+        npz_path = config.NPZ_PATH
+        csv_path = config.CSV_PATH
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[evaluate] Using device: {device}")
@@ -379,18 +387,23 @@ def main(ckpt_path: str = None, graph_type: str = None):
     # ------------------------------------------------------------------ #
     model, scaler, cfg = load_checkpoint(ckpt_path, device)
     num_nodes = cfg["num_nodes"]
+    seq_len   = cfg.get("seq_len", config.SEQ_LEN)
+    pred_len  = cfg.get("pred_len", config.PRED_LEN)
+    if dataset == "casablanca" and "seq_len" not in cfg:
+        seq_len  = config.CASABLANCA_SEQ_LEN
+        pred_len = config.CASABLANCA_PRED_LEN
 
     # ------------------------------------------------------------------ #
     # Data                                                                #
     # ------------------------------------------------------------------ #
     print("[evaluate] Loading data...")
     data_dict = build_dataset(
-        npz_path    = config.NPZ_PATH,
+        npz_path    = npz_path,
         train_ratio = config.TRAIN_RATIO,
         val_ratio   = config.VAL_RATIO,
-        seq_len     = config.SEQ_LEN,
-        pred_len    = config.PRED_LEN,
-        batch_size  = config.BATCH_SIZE,
+        seq_len     = seq_len,
+        pred_len    = pred_len,
+        batch_size  = min(config.BATCH_SIZE, 16) if dataset == "casablanca" else config.BATCH_SIZE,
     )
     test_loader = data_dict["test_loader"]
 
@@ -405,8 +418,8 @@ def main(ckpt_path: str = None, graph_type: str = None):
         graph_type            = graph_type,
         num_nodes             = num_nodes,
         device                = device,
-        csv_path              = config.CSV_PATH,
-        npz_path              = config.NPZ_PATH,
+        csv_path              = csv_path,
+        npz_path              = npz_path,
         train_ratio           = config.TRAIN_RATIO,
         val_ratio             = config.VAL_RATIO,
         sigma_sq              = config.SIGMA_SQ,
@@ -417,11 +430,11 @@ def main(ckpt_path: str = None, graph_type: str = None):
     # Graph comparison (always computed for the report)
     print("[evaluate] Comparing distance vs correlation graphs...")
     W_dist = build_distance_W(
-        csv_path=config.CSV_PATH, num_nodes=num_nodes,
+        csv_path=csv_path, num_nodes=num_nodes,
         sigma_sq=config.SIGMA_SQ, threshold=config.DISTANCE_THRESHOLD,
     )
     W_corr = build_corr_W(
-        npz_path=config.NPZ_PATH, num_nodes=num_nodes,
+        npz_path=npz_path, num_nodes=num_nodes,
         train_ratio=config.TRAIN_RATIO, val_ratio=config.VAL_RATIO,
         threshold=config.CORRELATION_THRESHOLD,
     )
@@ -468,11 +481,13 @@ def main(ckpt_path: str = None, graph_type: str = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate T-GCN on PEMS07")
+    parser = argparse.ArgumentParser(description="Evaluate T-GCN")
     parser.add_argument("--checkpoint", type=str, default=None,
                         help="Path to model checkpoint (default: config.BEST_MODEL_PATH)")
     parser.add_argument("--graph", type=str, default=None,
                         choices=["distance", "correlation"],
                         help="Override graph type (default: read from checkpoint)")
+    parser.add_argument("--dataset", type=str, default="pems07",
+                        choices=["pems07", "casablanca"])
     args = parser.parse_args()
-    main(args.checkpoint, args.graph)
+    main(args.checkpoint, args.graph, args.dataset)

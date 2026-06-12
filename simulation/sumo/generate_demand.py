@@ -14,6 +14,7 @@ from simulation.config import (
     ROUTE_FILE,
     SIMULATION_DURATION,
     SUMO_CFG,
+    TRAFFIC_MIN_PERIOD,
     TRAFFIC_VEHICLE_COUNT,
 )
 from simulation.sumo.build_network import run_sumo_tool
@@ -67,24 +68,27 @@ def map_boulevards_to_edges(net_path: str = NET_FILE) -> dict[int, list[str]]:
     return mapping
 
 
-def generate_routes(net_path: str = NET_FILE, route_path: str = ROUTE_FILE) -> str:
+def generate_routes(net_path: str = NET_FILE, route_path: str = ROUTE_FILE,
+                    vehicle_count: int = None) -> str:
     """Génère routes et types de véhicules avec randomTrips.py (script SUMO)."""
     os.makedirs(os.path.dirname(route_path), exist_ok=True)
 
+    vehicle_count = vehicle_count or TRAFFIC_VEHICLE_COUNT
     net_abs = os.path.abspath(net_path)
     route_abs = os.path.abspath(route_path)
-    period = max(0.5, SIMULATION_DURATION / TRAFFIC_VEHICLE_COUNT)
+    period = max(TRAFFIC_MIN_PERIOD, SIMULATION_DURATION / vehicle_count)
 
     args = [
         "-n", net_abs,
         "-r", route_abs,
         "-e", str(SIMULATION_DURATION),
-        "-p", str(period),
+        "-p", str(round(period, 4)),
         "--validate",
         "--trip-attributes", 'departLane="best" departSpeed="max" departPos="random"',
     ]
 
-    print(f"[SUMO] Génération demande trafic via randomTrips.py (period={period:.1f}s)...")
+    print(f"[SUMO] Demande trafic : ~{vehicle_count} véhicules / {SIMULATION_DURATION}s "
+          f"(period={period:.3f}s)...")
     result = run_sumo_tool("randomTrips", args, cwd=os.path.dirname(net_abs))
 
     if result.returncode != 0:
@@ -181,11 +185,12 @@ def generate_sumocfg(net_path: str = NET_FILE, route_path: str = ROUTE_FILE,
     return cfg_path
 
 
-def setup_all(net_path: str = NET_FILE) -> dict:
+def setup_all(net_path: str = NET_FILE, vehicle_count: int = None) -> dict:
     """Pipeline complet : mapping, routes, détecteurs, config."""
-    print("[SUMO] Mapping boulevards → arêtes...")
+    vehicle_count = vehicle_count or TRAFFIC_VEHICLE_COUNT
+    print(f"[SUMO] Mapping boulevards → arêtes...")
     boulevard_edges = map_boulevards_to_edges(net_path)
-    generate_routes(net_path)
+    generate_routes(net_path, vehicle_count=vehicle_count)
     generate_detectors(boulevard_edges, net_path)
     generate_sumocfg(net_path)
     return boulevard_edges
