@@ -24,6 +24,9 @@ CSV_PATH        = os.path.join(DATA_DIR, "PEMS07.csv")   # sensor distances
 CASABLANCA_NPZ   = os.path.join(DATA_DIR, "CASABLANCA05.npz")
 CASABLANCA_CSV   = os.path.join(DATA_DIR, "CASABLANCA05.csv")
 CASABLANCA_NODES = 5
+# Fenêtres réduites pour le petit jeu simulé (SUMO produit ~50–110 pas)
+CASABLANCA_SEQ_LEN  = 6
+CASABLANCA_PRED_LEN = 6
 
 BEST_MODEL_PATH = os.path.join(CHECKPOINT_DIR, "best_model.pt")
 

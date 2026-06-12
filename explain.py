@@ -68,7 +68,7 @@ def plot_graph_comparison(W_dist: np.ndarray,
     out_path = os.path.join(plot_dir, f"graph_compare_sensor_{sensor_id}.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"[explain] Graph comparison saved → {out_path}")
+    print(f"[explain] Graph comparison saved -> {out_path}")
 
 
 def plot_neighbor_heatmap(W: np.ndarray,
@@ -100,7 +100,7 @@ def plot_neighbor_heatmap(W: np.ndarray,
     out_path = os.path.join(plot_dir, out_name)
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"[explain] Heatmap saved → {out_path}")
+    print(f"[explain] Heatmap saved -> {out_path}")
 
 
 def plot_ablation_results(results: dict, plot_dir: str):
@@ -129,7 +129,7 @@ def plot_ablation_results(results: dict, plot_dir: str):
     out_path = os.path.join(plot_dir, "neighbor_ablation.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"[explain] Ablation plot saved → {out_path}")
+    print(f"[explain] Ablation plot saved -> {out_path}")
 
 
 def plot_dynamic_correlation(speed: np.ndarray,
@@ -171,7 +171,7 @@ def plot_dynamic_correlation(speed: np.ndarray,
     out_path = os.path.join(plot_dir, f"dynamic_corr_{sensor_a}_{sensor_b}.png")
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"[explain] Dynamic correlation saved → {out_path}")
+    print(f"[explain] Dynamic correlation saved -> {out_path}")
 
 
 # ---------------------------------------------------------------------------

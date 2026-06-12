@@ -90,10 +90,11 @@ def export_npz(repo: MongoRepository, run_id: str = None,
 
 
 def export_all(repo: MongoRepository, run_id: str = None):
-    """Export complet : NPZ (tgcn + test) + CSV distances."""
+    """Export complet : NPZ (toutes les données) + CSV distances."""
     build_distance_csv()
 
-    export_npz(repo, run_id, TGCN_NPZ_PATH, split="tgcn")
+    # Exporter TOUTES les données — train.py fait le split 60/20/20
+    export_npz(repo, run_id, TGCN_NPZ_PATH, split=None)
 
     test_path = TGCN_NPZ_PATH.replace(".npz", "_test.npz")
     try:

@@ -158,10 +158,16 @@ def main(graph_type: str = None, dataset: str = "pems07"):
         npz_path = config.CASABLANCA_NPZ
         csv_path = config.CASABLANCA_CSV
         dataset_label = "Casablanca (5 boulevards)"
+        seq_len = config.CASABLANCA_SEQ_LEN
+        pred_len = config.CASABLANCA_PRED_LEN
+        batch_size = min(config.BATCH_SIZE, 16)
     else:
         npz_path = config.NPZ_PATH
         csv_path = config.CSV_PATH
         dataset_label = "PEMS07"
+        seq_len = config.SEQ_LEN
+        pred_len = config.PRED_LEN
+        batch_size = config.BATCH_SIZE
 
     # ------------------------------------------------------------------ #
     # Device                                                              #
@@ -177,15 +183,17 @@ def main(graph_type: str = None, dataset: str = "pems07"):
         npz_path    = npz_path,
         train_ratio = config.TRAIN_RATIO,
         val_ratio   = config.VAL_RATIO,
-        seq_len     = config.SEQ_LEN,
-        pred_len    = config.PRED_LEN,
-        batch_size  = config.BATCH_SIZE,
+        seq_len     = seq_len,
+        pred_len    = pred_len,
+        batch_size  = batch_size,
     )
 
     train_loader = data_dict["train_loader"]
     val_loader   = data_dict["val_loader"]
     scaler       = data_dict["scaler"]
     num_nodes    = data_dict["num_nodes"]
+    seq_len      = data_dict["seq_len"]
+    pred_len     = data_dict["pred_len"]
 
     # ------------------------------------------------------------------ #
     # Adjacency matrix                                                    #
@@ -211,7 +219,7 @@ def main(graph_type: str = None, dataset: str = "pems07"):
         num_nodes   = num_nodes,
         in_features = 1,
         hidden_dim  = config.HIDDEN_DIM,
-        pred_len    = config.PRED_LEN,
+        pred_len    = pred_len,
         gcn_layers  = config.GCN_LAYERS,
     ).to(device)
 
@@ -297,8 +305,10 @@ def main(graph_type: str = None, dataset: str = "pems07"):
                     "num_nodes"  : num_nodes,
                     "hidden_dim" : config.HIDDEN_DIM,
                     "gcn_layers" : config.GCN_LAYERS,
-                    "pred_len"   : config.PRED_LEN,
+                    "seq_len"    : seq_len,
+                    "pred_len"   : pred_len,
                     "graph_type" : graph_type,
+                    "dataset"    : dataset,
                 },
             }, config.BEST_MODEL_PATH)
             print(f"  ✔ New best model saved  (val_loss={val_loss:.4f})")

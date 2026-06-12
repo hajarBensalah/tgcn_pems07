@@ -41,15 +41,19 @@ def step_build_network():
     build_network()
 
 
-def step_setup_demand():
+def step_setup_demand(vehicle_count: int = None):
     from simulation.sumo.generate_demand import setup_all
-    return setup_all()
+    return setup_all(vehicle_count=vehicle_count)
 
 
-def step_simulate(demo: bool = False, use_gui: bool = False, skip_setup: bool = False):
+def step_simulate(demo: bool = False, use_gui: bool = False, skip_setup: bool = False,
+                  vehicle_count: int = None):
+    from simulation.config import TRAFFIC_VEHICLE_COUNT
     from simulation.mongodb.repository import MongoRepository
     from simulation.sumo.generate_demand import map_boulevards_to_edges
     from simulation.sumo.run_simulation import run_demo_simulation, run_sumo_simulation
+
+    vehicle_count = vehicle_count or TRAFFIC_VEHICLE_COUNT
 
     repo = MongoRepository()
     try:
@@ -62,7 +66,10 @@ def step_simulate(demo: bool = False, use_gui: bool = False, skip_setup: bool = 
 
     repo.init_boulevards()
 
-    run_id = repo.create_run({"mode": "demo" if demo else "sumo"})
+    run_id = repo.create_run({
+        "mode": "demo" if demo else "sumo",
+        "vehicle_count": vehicle_count,
+    })
     print(f"[Run] ID: {run_id}")
 
     if demo:
@@ -72,7 +79,7 @@ def step_simulate(demo: bool = False, use_gui: bool = False, skip_setup: bool = 
         if skip_setup:
             boulevard_edges = map_boulevards_to_edges()
         else:
-            boulevard_edges = step_setup_demand()
+            boulevard_edges = step_setup_demand(vehicle_count=vehicle_count)
         try:
             aggregated = run_sumo_simulation(boulevard_edges, repo, run_id, use_gui)
         except (ImportError, FileNotFoundError) as e:
@@ -133,22 +140,27 @@ def main():
     parser.add_argument("--metrics", action="store_true",
                         help="Afficher les métriques (raccourci pour --step metrics)")
     parser.add_argument("--run-id", type=str, default=None)
+    parser.add_argument("--vehicles", type=int, default=None,
+                        help="Nombre de véhicules (ex: 25000). Défaut: config TRAFFIC_VEHICLE_COUNT")
     args = parser.parse_args()
 
     if args.metrics:
         args.step = "metrics"
+
+    vehicle_count = args.vehicles
 
     if args.step in ("all", "osm") and not args.demo:
         step_osm()
 
     if args.step in ("all", "sumo") and not args.demo:
         step_build_network()
-        step_setup_demand()
+        step_setup_demand(vehicle_count=vehicle_count)
 
     run_id = args.run_id
     if args.step in ("all", "simulate"):
         skip_setup = args.step == "all" and not args.demo
-        run_id = step_simulate(demo=args.demo, use_gui=args.gui, skip_setup=skip_setup)
+        run_id = step_simulate(demo=args.demo, use_gui=args.gui, skip_setup=skip_setup,
+                               vehicle_count=vehicle_count)
 
     if args.step in ("all", "export"):
         step_export(run_id)
